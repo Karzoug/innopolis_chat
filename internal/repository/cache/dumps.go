@@ -2,24 +2,32 @@ package cache
 
 import (
 	"encoding/json"
-	"log"
 	"os"
+
+	"github.com/rs/zerolog/log"
 )
 
 func makeDump(filename string, pull any) {
 	data, err := json.Marshal(pull)
 	if err != nil {
-		log.Println("ERROR can not marshall pull to "+filename+": ", err.Error())
+		log.Error().
+			Err(err).
+			Str("filename", filename).
+			Msg("can not marshall pull")
 		return
 	}
 
 	if err := os.WriteFile(filename, data, 0644); err != nil {
-		log.Println("ERROR can not write pull to  "+filename+": ", err.Error())
+		log.Error().
+			Err(err).
+			Str("filename", filename).
+			Msg("can not write pull")
 	}
-	log.Println("INFO dump saved successfully to " + filename)
+	log.Info().
+		Str("filename", filename).
+		Msg("dump saved successfully")
 }
 func loadFromDump(filename string, pull any) error {
-
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return nil
 	}
@@ -29,6 +37,5 @@ func loadFromDump(filename string, pull any) error {
 		return err
 	}
 
-	err = json.Unmarshal(data, &pull)
-	return err
+	return json.Unmarshal(data, &pull)
 }

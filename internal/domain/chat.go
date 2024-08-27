@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -66,6 +67,35 @@ type MessageChatRequest struct {
 type Delivery struct {
 	Type DeliveryType `json:"type"`
 	Data interface{}  `json:"data"`
+}
+
+func (d *Delivery) UnmarshalJSON(data []byte) error {
+	type MyDelivery Delivery
+
+	aliasValue := &struct {
+		*MyDelivery
+		Data json.RawMessage `json:"data"`
+	}{
+		MyDelivery: (*MyDelivery)(d),
+	}
+	if err := json.Unmarshal(data, aliasValue); err != nil {
+		return err
+	}
+
+	switch d.Type {
+	case DeliveryTypeNewChat:
+		var s string
+		d.Data = s
+		return json.Unmarshal(aliasValue.Data, &d.Data)
+	case DeliveryTypeNewMsg:
+		d.Data = &MessageChatDelivery{}
+		return json.Unmarshal(aliasValue.Data, d.Data)
+	case DeliveryTypeError:
+		d.Data = &ErrorResponse{}
+		return json.Unmarshal(aliasValue.Data, d.Data)
+	default:
+		return fmt.Errorf("unknown delivery type: %s", d.Type)
+	}
 }
 
 // MessageChatDelivery can support messages types:
