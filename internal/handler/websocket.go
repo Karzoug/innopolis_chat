@@ -5,9 +5,10 @@ import (
 	"chat/internal/service"
 	"chat/internal/service/pools"
 	"encoding/json"
-	"github.com/gorilla/websocket"
-	"log"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -17,10 +18,10 @@ const (
 )
 
 func HandleWsConn(conn *websocket.Conn, UID domain.ID) {
-
 	defer func() {
 		// closing the user channel and ending write goroutine
 		if pools.Users.Delete(UID) {
+			log.Info().Str("UID", string(UID)).Msg("conn closed")
 			conn.Close()
 		}
 	}()
@@ -33,6 +34,7 @@ func HandleWsConn(conn *websocket.Conn, UID domain.ID) {
 		defer func() {
 			ticker.Stop()
 			if pools.Users.Delete(UID) {
+				log.Info().Str("UID", string(UID)).Msg("conn closed")
 				conn.Close()
 			}
 		}()
@@ -40,10 +42,10 @@ func HandleWsConn(conn *websocket.Conn, UID domain.ID) {
 			select {
 			case msg, ok := <-ch:
 				if !ok {
-					log.Println("channel for " + UID + " closed")
+					log.Debug().Str("UID", string(UID)).Msg("channel closed")
 					return
 				}
-				log.Println("SEND to ", UID, msg)
+				log.Debug().Str("UID", string(UID)).Any("msg", msg).Msg("send message")
 
 				conn.SetWriteDeadline(time.Now().Add(writeWait))
 				if err := conn.WriteJSON(msg); err != nil {
@@ -51,7 +53,7 @@ func HandleWsConn(conn *websocket.Conn, UID domain.ID) {
 					return
 				}
 			case <-ticker.C:
-				//log.Println("SEND Ping to", UID)
+				log.Trace().Str("UID", string(UID)).Msg("send ping")
 				conn.SetWriteDeadline(time.Now().Add(writeWait))
 				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 					handleWsError(err, UID)
@@ -63,7 +65,7 @@ func HandleWsConn(conn *websocket.Conn, UID domain.ID) {
 
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
-		//log.Println("GOT Pong from", UID)
+		log.Trace().Str("from UID", string(UID)).Msg("got pong")
 		conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
@@ -74,7 +76,11 @@ func HandleWsConn(conn *websocket.Conn, UID domain.ID) {
 			handleWsError(err, UID)
 			return
 		}
-		log.Println("GOT from", UID, typ, string(message))
+		log.Debug().
+			Str("from UID", string(UID)).
+			Int("type", typ).
+			Str("message", string(message)).
+			Msg("got message")
 		switch typ {
 		case websocket.TextMessage, websocket.BinaryMessage:
 			var req domain.Request
@@ -116,9 +122,9 @@ func HandleWsConn(conn *websocket.Conn, UID domain.ID) {
 func handleWsError(err error, uid domain.ID) {
 	switch {
 	case websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway):
-		log.Println("websocket session closed by client", uid)
+		log.Debug().Str("UID", string(uid)).Msg("websocket session closed by client")
 	default:
-		log.Println("error websocket message", err.Error(), "for", uid)
+		log.Debug().Str("UID", string(uid)).Err(err).Msg("error websocket message")
 	}
 }
 
@@ -127,10 +133,12 @@ func sendErrorResp(UID domain.ID, err error) {
 }
 
 func sendResp(UID domain.ID, typ domain.DeliveryType, data interface{}) {
-
 	var resp domain.Delivery
 	resp.Type = typ
 	resp.Data = data
-	//log.Println("SEND to channel", UID, resp)
+	log.Debug().
+		Str("UID", string(UID)).
+		Any("resp", resp).
+		Msg("send to channel")
 	pools.Users.Send(UID, resp)
 }

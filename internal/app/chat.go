@@ -8,37 +8,36 @@ import (
 	"chat/pkg/authclient"
 	"context"
 	"errors"
-	"log"
 	"net/http"
-	"os/signal"
 	"sync"
-	"syscall"
+
+	"github.com/rs/zerolog/log"
 )
 
-func Run() {
-	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	var wg sync.WaitGroup
+func Run(ctx context.Context) {
+	wg := sync.WaitGroup{}
 
 	chatDB, err := cache.ChatCacheInit(ctx, &wg)
 	if err != nil {
-		log.Fatalf("ERROR failed to initialize chat database: %v", err)
+		log.Fatal().Err(err).Msg("failed to initialize chat database")
 	}
 	// initialize service
 	service.Init(chatDB)
 	authclient.Init("localhost:8000")
 
 	go func() {
+		log.Info().Str("address", "localhost:8001").Msg("chat server started")
 		err := server.Run("localhost", "8001", http.HandlerFunc(handler.HandleHTTPReq))
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal("ERROR server run ", err)
+			log.Fatal().Err(err).Msg("server run")
 		}
 	}()
 
 	<-ctx.Done()
 
 	if err := server.Shutdown(); err != nil {
-		log.Fatal("ERROR server shutdown ", err)
+		log.Fatal().Err(err).Msg("server shutdown")
 	}
 	wg.Wait()
-	log.Println("INFO chat service was gracefully shutdown")
+	log.Info().Msg("chat server stopped")
 }

@@ -3,11 +3,12 @@ package handler
 import (
 	"chat/internal/domain"
 	"chat/pkg/authclient"
-	"github.com/gorilla/websocket"
-	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog/log"
 )
 
 const HeaderAuthorization = "Authorization"
@@ -35,24 +36,28 @@ func HandleHTTPReq(resp http.ResponseWriter, req *http.Request) {
 
 	if token == "" {
 		resp.WriteHeader(http.StatusUnauthorized)
-		log.Println("Get request", req.Method, token, "error", http.StatusUnauthorized)
+		log.Debug().
+			Str("method", req.Method).
+			Str("token", token).
+			Str("error", http.StatusText(http.StatusUnauthorized))
 		return
 	}
 
 	userID, valid := authclient.ValidateToken(token)
 	if !valid {
 		resp.WriteHeader(http.StatusUnauthorized)
-		log.Println("Get request", req.Method, token, "error", http.StatusUnauthorized)
+		log.Debug().
+			Str("method", req.Method).
+			Str("token", token).
+			Str("error", http.StatusText(http.StatusUnauthorized))
 		return
 	}
 
-	log.Println("userID", userID)
+	log.Info().Str("user ID", userID).Msg("user connected")
 
-	// обновление соединения до WebSocket
 	conn, err := upgrader.Upgrade(resp, req, nil)
 	if err != nil {
-		// Upgrade сам вставляет статус код в респонс
-		log.Println(err)
+		log.Error().Err(err).Msg("failed to upgrade conn")
 		return
 	}
 	HandleWsConn(conn, domain.ID(userID))
